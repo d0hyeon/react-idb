@@ -69,27 +69,36 @@ export function getVersionIDB (name: string): Promise<number> {
   })
 } 
 
-export async function createIDB(name: string, storeSpecs: ObjectStoreSpec[], version: number): Promise<IDBDatabase> {
+export async function createIDB(
+  name: string, 
+  storeSpecs: ObjectStoreSpec[], 
+  _version?: number,
+  _autoBatch?: boolean
+): Promise<IDBDatabase> {
+  const autoBatch = _autoBatch ?? !!_version
+  const version = _version ?? await getVersionIDB(name)
   return new Promise((resolve, reject) => {
     const IDBOpenRequest = indexedDB.open(name, version)
 
     IDBOpenRequest.onsuccess = () => {
       const db = IDBOpenRequest.result
-      const createdStoreNames = getCreateStoreNames(db, storeSpecs)
-      const deletedStoreNames = getDeleteStoreNames(db, storeSpecs)
-      
-      if(createdStoreNames.length || deletedStoreNames.length) {
-        return createIDB(name, storeSpecs, version + 1)
-      }
-      
-      for(let i = 0, leng = storeSpecs.length; i < leng; i++) {
-        const spec = storeSpecs[i]
-        const objectStore = db.transaction(spec.name, 'readonly').objectStore(spec.name)
-        const createIndexs = getCreateIndexNames(objectStore, spec.indexs)
-        const deleteIndexs = getDeleteIndexNames(objectStore, spec.indexs)
+      if(autoBatch) {
+        const createdStoreNames = getCreateStoreNames(db, storeSpecs)
+        const deletedStoreNames = getDeleteStoreNames(db, storeSpecs)
+        
+        if(createdStoreNames.length || deletedStoreNames.length) {
+          return createIDB(name, storeSpecs, version + 1, autoBatch)
+        }
+        
+        for(let i = 0, leng = storeSpecs.length; i < leng; i++) {
+          const spec = storeSpecs[i]
+          const objectStore = db.transaction(spec.name, 'readonly').objectStore(spec.name)
+          const createIndexs = getCreateIndexNames(objectStore, spec.indexs)
+          const deleteIndexs = getDeleteIndexNames(objectStore, spec.indexs)
 
-        if(createIndexs.length || deleteIndexs.length) {
-          return createIDB(name, storeSpecs, version + 1)
+          if(createIndexs.length || deleteIndexs.length) {
+            return createIDB(name, storeSpecs, version + 1, autoBatch)
+          }
         }
       }
       resolve(IDBOpenRequest.result)
