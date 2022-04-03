@@ -20,30 +20,19 @@ interface ProviderProps {
 const Provider: FC<ProviderProps> = ({ 
   dbName,
   declareStores,
-  version: _version,
+  version,
   children, 
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [db, setDb] = useState<IDBDatabase | null>(null);
-  const [version, setVersion] = useState<number | undefined>()
-  
-  useEffect(() => {
-    if(_version) {
-      setVersion(_version)
-    } else {
-      getVersionIDB(dbName).then(setVersion)
-    }
-  }, [_version, dbName, setVersion])
 
   useEffect(() => {
-    if(version !== undefined) {
-      createIDB(dbName, declareStores, version)
-        .then(setDb)
-    }
+    createIDB(dbName, declareStores, version)
+      .then(setDb)
   }, [version, setDb])
 
   useEffect(() => {
-    if(db && version) {
+    if(db) {
       setIsLoading(true)
     }
   }, [db, version, setIsLoading])
