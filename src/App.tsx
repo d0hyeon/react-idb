@@ -1,10 +1,39 @@
 import React from 'react';
 import logo from './logo.svg';
 import './App.css';
+import Provider from './components/indexeddb/Provider'
+import { ObjectStoreSpec } from './types';
+
+const stores: ObjectStoreSpec[] = [
+  {
+    name: 'object-store1',
+    indexs: ['id', 'title', 'content', 'body'],
+    autoIncrement: true
+  }, 
+  {
+    name: 'object-store2',
+    indexs: ['id', 'title', 'content', 'body'],
+    autoIncrement: true
+  },
+  {
+    name: 'object-store3',
+    indexs: ['id', 'title', 'content', 'body', 'user'],
+    autoIncrement: true
+  },
+  {
+    name: 'object-store4',
+    indexs: ['id', 'title', 'content', 'body', 'user'],
+    autoIncrement: true
+  }
+]
 
 function App() {
   return (
-    <div className="App">
+    <Provider
+      dbName="db1"
+      declareStores={stores}
+    >
+      <div className="App">
       <header className="App-header">
         <img src={logo} className="App-logo" alt="logo" />
         <p>
@@ -20,6 +49,7 @@ function App() {
         </a>
       </header>
     </div>
+    </Provider>
   );
 }
 
