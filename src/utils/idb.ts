@@ -1,4 +1,4 @@
-import { ObjectStoreSpec } from "../types"
+import { CreateIDBOptions, CreateIDBOptionsWithAutoVersion, ObjectStoreSpec } from "../types"
 
 export function getCreatedStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
   const createdObjectStores: string[] = []
@@ -69,70 +69,86 @@ export function getVersionIDB (name: string): Promise<number> {
   })
 } 
 
+
+export const DEFAULT_OPTIONS: CreateIDBOptionsWithAutoVersion = {
+  autoVersioning: true
+}
 export async function createIDB(
   name: string, 
   storeSpecs: ObjectStoreSpec[], 
-  _version?: number,
-  _autoBatch?: boolean
+  options: CreateIDBOptions = DEFAULT_OPTIONS
 ): Promise<IDBDatabase> {
-  const autoBatch = _autoBatch ?? !!_version
-  const version = _version ?? await getVersionIDB(name)
-  return new Promise((resolve, reject) => {
-    const IDBOpenRequest = indexedDB.open(name, version)
+  const { autoVersioning } = options
+  const version = options.autoVersioning ? await getVersionIDB(name) : options.version
+  const blackStoreList = autoVersioning && typeof autoVersioning === 'object'
+    ? autoVersioning.blackStoreList
+    : null
 
-    IDBOpenRequest.onsuccess = () => {
-      const db = IDBOpenRequest.result
-      if(autoBatch) {
-        const createdStoreNames = getCreatedStoreNames(db, storeSpecs)
-        const deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
-        
-        if(createdStoreNames.length || deletedStoreNames.length) {
-          return createIDB(name, storeSpecs, version + 1, autoBatch)
-        }
-        
-        for(let i = 0, leng = storeSpecs.length; i < leng; i++) {
-          const spec = storeSpecs[i]
-          const objectStore = db.transaction(spec.name, 'readonly').objectStore(spec.name)
-          const createIndexs = getCreatedIndexNames(objectStore, spec.indexs)
-          const deleteIndexs = getDeletedIndexNames(objectStore, spec.indexs)
+  function getDatabaseByVersion (name: string, storeSpecs: ObjectStoreSpec[], version: number): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const IDBOpenRequest = indexedDB.open(name, version)
+  
+      IDBOpenRequest.onsuccess = () => {
+        const db = IDBOpenRequest.result
+        if(autoVersioning) {
+          let createdStoreNames = getCreatedStoreNames(db, storeSpecs)
+          let deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
 
-          if(createIndexs.length || deleteIndexs.length) {
-            return createIDB(name, storeSpecs, version + 1, autoBatch)
+          if(blackStoreList && blackStoreList.length) {
+            createdStoreNames = createdStoreNames.filter(value => blackStoreList.includes(value))
+            deletedStoreNames = deletedStoreNames.filter(value => blackStoreList.includes(value))
+          }
+          
+          if(createdStoreNames.length || deletedStoreNames.length) {
+            return getDatabaseByVersion(name, storeSpecs, version + 1)
+          }
+          
+          for(let i = 0, leng = storeSpecs.length; i < leng; i++) {
+            const spec = storeSpecs[i]
+            const objectStore = db.transaction(spec.name, 'readonly').objectStore(spec.name)
+            const createIndexs = getCreatedIndexNames(objectStore, spec.indexs)
+            const deleteIndexs = getDeletedIndexNames(objectStore, spec.indexs)
+  
+            if(createIndexs.length || deleteIndexs.length) {
+              return getDatabaseByVersion(name, storeSpecs, version + 1)
+            }
           }
         }
+        resolve(IDBOpenRequest.result)
       }
-      resolve(IDBOpenRequest.result)
-    }
-    IDBOpenRequest.onupgradeneeded = (event) => {
-      const db = IDBOpenRequest.result
-      const deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
-      const createdStoreNames = getCreatedStoreNames(db, storeSpecs)
+      IDBOpenRequest.onupgradeneeded = (event) => {
+        const db = IDBOpenRequest.result
+        const deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
+        const createdStoreNames = getCreatedStoreNames(db, storeSpecs)
+  
+        storeSpecs.forEach(({ name, indexs, uniqueIndexs, keyPath, autoIncrement }) => {
+          const didCreateStore = createdStoreNames.includes(name)
+          if(didCreateStore) {
+            const newStore = db.createObjectStore(name, { keyPath, autoIncrement })
+            indexs.forEach((index) => {
+              newStore.createIndex(index, index, { unique: uniqueIndexs?.includes(index) })
+            })
+          } else {
+            // @ts-ignore
+            const objectStore = event.target.transaction.objectStore(name)
+            const createIndexs = getCreatedIndexNames(objectStore, indexs)
+            const deleteIndexs = getDeletedIndexNames(objectStore, indexs)
+  
+            createIndexs.forEach((index) => {
+              objectStore.createIndex(index, index, { unique: uniqueIndexs?.includes(index) })
+            })
+            deleteIndexs.forEach((index) => {
+              objectStore.deleteIndex(index)
+            })
+          }
+        })
+        deletedStoreNames.forEach(store => {
+          db.deleteObjectStore(store)
+        })
+      }
+      IDBOpenRequest.onerror = (error) => reject(error)
+    })
+  }
 
-      storeSpecs.forEach(({ name, indexs, uniqueIndexs, keyPath, autoIncrement }) => {
-        const didCreateStore = createdStoreNames.includes(name)
-        if(didCreateStore) {
-          const newStore = db.createObjectStore(name, { keyPath, autoIncrement })
-          indexs.forEach((index) => {
-            newStore.createIndex(index, index, { unique: uniqueIndexs?.includes(index) })
-          })
-        } else {
-          // @ts-ignore
-          const objectStore = event.target.transaction.objectStore(name)
-          const createIndexs = getCreatedIndexNames(objectStore, indexs)
-          const deleteIndexs = getDeletedIndexNames(objectStore, indexs)
-
-          createIndexs.forEach((index) => {
-            objectStore.createIndex(index, index, { unique: uniqueIndexs?.includes(index) })
-          })
-          deleteIndexs.forEach((index) => {
-            objectStore.deleteIndex(index)
-          })
-        }
-      })
-      deletedStoreNames.forEach(store => {
-        db.deleteObjectStore(store)
-      })
-    }
-    IDBOpenRequest.onerror = (error) => reject(error)
-  })
+  return getDatabaseByVersion(name, storeSpecs, version)
 }
