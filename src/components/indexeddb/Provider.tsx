@@ -1,5 +1,5 @@
 import { FC, useEffect, useMemo, useState } from "react";
-import { createIDB, getCreateIndexNames, getDeleteIndexNames, getVersionIDB } from "../../utils/idb";
+import { createIDB } from "../../utils/idb";
 import { ContextState, idbContext, INITIAL_STATE } from "./Context";
 
 interface ObjectStore {
