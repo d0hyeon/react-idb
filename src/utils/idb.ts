@@ -1,6 +1,6 @@
 import { ObjectStoreSpec } from "../types"
 
-export function getCreateStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
+export function getCreatedStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
   const createdObjectStores: string[] = []
   
   storeSpecs.forEach(({ name }) => {
@@ -12,7 +12,7 @@ export function getCreateStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpe
   return createdObjectStores
 }
 
-export function getDeleteStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
+export function getDeletedStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
   let idx = 0
   const names = storeSpecs.map(store => store.name)
   const deletedObjectStores = []
@@ -31,18 +31,18 @@ export function getDeleteStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpe
   return deletedObjectStores
 }
 
-export function getCreateIndexNames (objectStore: IDBObjectStore, indexes: string[]) {
-  const createIndexNames: string[] = []  
+export function getCreatedIndexNames (objectStore: IDBObjectStore, indexes: string[]) {
+  const createdIndexNames: string[] = []  
   indexes.forEach((index) => {
     if(!objectStore.indexNames.contains(index)) {
-      createIndexNames.push(index)
+      createdIndexNames.push(index)
     }
   })
-  return createIndexNames
+  return createdIndexNames
 }
 
-export function getDeleteIndexNames(objectStore: IDBObjectStore, indexs: string[]) {
-  const deleteIndexNames = []
+export function getDeletedIndexNames(objectStore: IDBObjectStore, indexs: string[]) {
+  const deletedIndexNames = []
   let idx = 0;
   while(true) {
     const curr = objectStore.indexNames.item(idx);
@@ -50,11 +50,11 @@ export function getDeleteIndexNames(objectStore: IDBObjectStore, indexs: string[
       break;
     }
     if(!indexs.includes(curr)) {
-      deleteIndexNames.push(curr);
+      deletedIndexNames.push(curr);
     }
     idx ++;
   }
-  return deleteIndexNames
+  return deletedIndexNames
 }
 
 export function getVersionIDB (name: string): Promise<number> {
@@ -83,8 +83,8 @@ export async function createIDB(
     IDBOpenRequest.onsuccess = () => {
       const db = IDBOpenRequest.result
       if(autoBatch) {
-        const createdStoreNames = getCreateStoreNames(db, storeSpecs)
-        const deletedStoreNames = getDeleteStoreNames(db, storeSpecs)
+        const createdStoreNames = getCreatedStoreNames(db, storeSpecs)
+        const deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
         
         if(createdStoreNames.length || deletedStoreNames.length) {
           return createIDB(name, storeSpecs, version + 1, autoBatch)
@@ -93,8 +93,8 @@ export async function createIDB(
         for(let i = 0, leng = storeSpecs.length; i < leng; i++) {
           const spec = storeSpecs[i]
           const objectStore = db.transaction(spec.name, 'readonly').objectStore(spec.name)
-          const createIndexs = getCreateIndexNames(objectStore, spec.indexs)
-          const deleteIndexs = getDeleteIndexNames(objectStore, spec.indexs)
+          const createIndexs = getCreatedIndexNames(objectStore, spec.indexs)
+          const deleteIndexs = getDeletedIndexNames(objectStore, spec.indexs)
 
           if(createIndexs.length || deleteIndexs.length) {
             return createIDB(name, storeSpecs, version + 1, autoBatch)
@@ -105,8 +105,8 @@ export async function createIDB(
     }
     IDBOpenRequest.onupgradeneeded = (event) => {
       const db = IDBOpenRequest.result
-      const deletedStoreNames = getDeleteStoreNames(db, storeSpecs)
-      const createdStoreNames = getCreateStoreNames(db, storeSpecs)
+      const deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
+      const createdStoreNames = getCreatedStoreNames(db, storeSpecs)
 
       storeSpecs.forEach(({ name, indexs, uniqueIndexs, keyPath, autoIncrement }) => {
         const didCreateStore = createdStoreNames.includes(name)
@@ -118,8 +118,8 @@ export async function createIDB(
         } else {
           // @ts-ignore
           const objectStore = event.target.transaction.objectStore(name)
-          const createIndexs = getCreateIndexNames(objectStore, indexs)
-          const deleteIndexs = getDeleteIndexNames(objectStore, indexs)
+          const createIndexs = getCreatedIndexNames(objectStore, indexs)
+          const deleteIndexs = getDeletedIndexNames(objectStore, indexs)
 
           createIndexs.forEach((index) => {
             objectStore.createIndex(index, index, { unique: uniqueIndexs?.includes(index) })
