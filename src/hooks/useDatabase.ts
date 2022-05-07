@@ -2,6 +2,7 @@ import { InitializeDatabase } from "../utils/createDatabase";
 import { useContext, useEffect, useMemo } from 'react';
 import { idbContext } from "../components/indexeddb/Context";
 import { useState } from 'react';
+import { TypedObjectStoreIDBDatabase } from "../utils/createIDB";
 
 interface UseDatabaseCommon {
   name: string;
@@ -12,12 +13,12 @@ interface UseDatabasePendingApi extends UseDatabaseCommon {
   database: null;
 }
 
-interface UseDatabaseApi extends UseDatabaseCommon {
+interface UseDatabaseApi<T = unknown> extends UseDatabaseCommon {
   pending: false;
-  database: IDBDatabase
+  database: TypedObjectStoreIDBDatabase<T>
 }
-export interface UseSuspenseApi {
-  read: () => UseDatabaseApi
+export interface UseSuspenseApi<T = unknown> {
+  read: () => UseDatabaseApi<T>
 }
 
 export type UseDatabase = (InitializeDatabase: InitializeDatabase) =>  UseDatabaseApi | UseDatabasePendingApi
@@ -49,31 +50,40 @@ function wrapPromise<T extends unknown> (promise: Promise<T>) {
   };
 }
 
-export function useSuspenseDatabase (initializeDatabase: InitializeDatabase): UseSuspenseApi {
-  const { registerDatabase } = useContext(idbContext)
+export function useSuspenseDatabase<T> (initializeDatabase: InitializeDatabase<T>) {
+  const { getDatabase, registerDatabase } = useContext(idbContext)
   const { name } = initializeDatabase
-  const promise = useMemo<Promise<UseDatabaseApi>>(() => {
+  const promise = useMemo(() => {
     return new Promise(async (resolve) => {
+      const registeredDatabase = getDatabase(name)
+      if(registeredDatabase) {
+        return resolve({
+          name,
+          pending: false,
+          database: registeredDatabase
+        })
+      }
       const database = await registerDatabase(initializeDatabase)
       resolve({
         name,
         pending: false,
         database
       })
+      
     })
   }, [initializeDatabase, registerDatabase])  
 
-  return useMemo(() => wrapPromise(promise) as UseSuspenseApi, [promise])
+  return useMemo(() => wrapPromise(promise) as UseSuspenseApi<T>, [promise])
 }
 
-export function useDatabase(initializeDatabase: InitializeDatabase) {
+export function useDatabase<T>(initializeDatabase: InitializeDatabase<T>) {
   const { name } = initializeDatabase
   const { getDatabase, registerDatabase } = useContext(idbContext)
 
-  const registedDatabase = useMemo(() => getDatabase(name), [name, getDatabase])
-  const [database, setDatabase] = useState<IDBDatabase | null>(registedDatabase)
+  const registedDatabase = useMemo(() => getDatabase(name) as TypedObjectStoreIDBDatabase<T>, [name, getDatabase])
+  const [database, setDatabase] = useState<TypedObjectStoreIDBDatabase<T> | null>(registedDatabase)
   const pending = useMemo(() => !database, [database])
-
+  
   useEffect(() => {
     if(!database) {
       registerDatabase(initializeDatabase)
@@ -84,13 +94,13 @@ export function useDatabase(initializeDatabase: InitializeDatabase) {
   
   if(database) {
     return {
-      name: initializeDatabase.name,
+      name,
       pending,
       database
     } 
   }
   return {
-    name: initializeDatabase.name,
+    name,
     pending,
     database,
     transaction: null

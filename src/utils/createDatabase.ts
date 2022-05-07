@@ -1,10 +1,10 @@
 
 import { CreateIDBOptions, CreateIDBOptionWithoutAutoBatch, CreateIDBOptionsWithAutoBatch, ObjectStoreMap } from '../types';
-import { createIDB, DEFAULT_OPTIONS } from './createIDB';
+import { createIDB, DEFAULT_OPTIONS, TypedObjectStoreIDBDatabase } from './createIDB';
 
-export interface InitializeDatabase {
+export interface InitializeDatabase<T = unknown> {
   name: string;
-  creatingDatabase: Promise<IDBDatabase>;
+  creatingDatabase: Promise<TypedObjectStoreIDBDatabase<T>>;
 }
 
 type CreateDatabaseSpec = {
@@ -21,12 +21,12 @@ function isCreateIDBOptions (options: unknown): options is CreateIDBOptions {
   return false
 }
 
-export function createDatabase (spec: CreateDatabaseSpec): InitializeDatabase {
+export function createDatabase <T>(spec: CreateDatabaseSpec): InitializeDatabase<T> {
   const { name, objectStores, ...rest } = spec
   const options = isCreateIDBOptions(rest) ? rest : DEFAULT_OPTIONS
   
   return {
     name,
-    creatingDatabase: createIDB(name, objectStores, options),
+    creatingDatabase: createIDB<T>(name, objectStores, options),
   }
 }

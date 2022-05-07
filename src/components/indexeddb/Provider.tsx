@@ -1,9 +1,10 @@
 import { FC, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InitializeDatabase } from "../../utils/createDatabase";
+import { TypedObjectStoreIDBDatabase } from "../../utils/createIDB";
 import { ContextState, idbContext } from "./Context";
 
 interface DatabaseMap {
-  [key: string]: IDBDatabase
+  [key: string]: TypedObjectStoreIDBDatabase
 }
 
 const Provider: FC<{isSuspense?: ContextState['isSuspense']}> = ({ 
@@ -12,13 +13,13 @@ const Provider: FC<{isSuspense?: ContextState['isSuspense']}> = ({
 }) => {
   const [databaseMap, setDatabaseMap] = useState<DatabaseMap>({})
   const databaseMapRef = useRef<DatabaseMap>({})
-  const pendingDatabaseMapRef = useRef<Record<string, Promise<IDBDatabase>>>({})
+  const pendingDatabaseMapRef = useRef<Record<string, Promise<TypedObjectStoreIDBDatabase>>>({})
 
   useEffect(() => {
     databaseMapRef.current = databaseMap
   }, [databaseMap, databaseMapRef])
 
-  const registerDatabase = useCallback((initiDatabase: InitializeDatabase): Promise<IDBDatabase> => {
+  const registerDatabase = useCallback((initiDatabase: InitializeDatabase) => {
     const {name, creatingDatabase} = initiDatabase
 
     if(!!databaseMapRef.current[name]) {
@@ -31,7 +32,7 @@ const Provider: FC<{isSuspense?: ContextState['isSuspense']}> = ({
 
     return new Promise((resolve) => {
       pendingDatabaseMapRef.current[name] = creatingDatabase
-      creatingDatabase.then((database) => {
+      creatingDatabase.then((database: TypedObjectStoreIDBDatabase) => {
         setDatabaseMap(curr => ({
           ...curr,
           [name]: database
@@ -52,6 +53,7 @@ const Provider: FC<{isSuspense?: ContextState['isSuspense']}> = ({
   }, [pendingDatabaseMapRef])
 
   const contextValue = useMemo<ContextState>(() => ({
+    // @ts-ignore
     registerDatabase,
     getDatabase,
     getPendingDatabases,

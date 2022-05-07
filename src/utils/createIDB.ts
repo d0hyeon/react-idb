@@ -73,11 +73,24 @@ export function getVersionIDB (name: string): Promise<number> {
 export const DEFAULT_OPTIONS: CreateIDBOptionsWithAutoBatch = {
   autoBatch: true
 }
-export async function createIDB(
+
+export type TypedObjectStore<S = unknown> = Omit<IDBObjectStore, 'add' | 'put' | 'createIndex' | 'deleteIndex'> & {
+  add (value: S, key?: IDBValidKey): IDBRequest<IDBValidKey>;
+  put (value: S, key?: IDBValidKey): IDBRequest<IDBValidKey>;
+}
+
+export type TypedIDBTransaction<Scheme> = {
+  objectStore: (storeName: keyof Scheme) => TypedObjectStore<Scheme[typeof storeName]>
+}
+
+export type TypedObjectStoreIDBDatabase<T = unknown> = Omit<IDBDatabase, 'transaction'> & {
+  transaction: (storeName: keyof T, mode: IDBTransactionMode) => TypedIDBTransaction<T>
+}
+export async function createIDB<T>(
   databaseName: string, 
   storeMap: ObjectStoreMap, 
   options: CreateIDBOptions = DEFAULT_OPTIONS
-): Promise<IDBDatabase> {
+): Promise<TypedObjectStoreIDBDatabase<T>> {
   const { autoBatch } = options
   const version = options?.autoBatch 
     ? await getVersionIDB(databaseName) 
@@ -86,7 +99,7 @@ export async function createIDB(
     ? autoBatch.blackStoreList
     : null
 
-  function getDatabaseByVersion (databaseName: string, storeMap: ObjectStoreMap, version: number): Promise<IDBDatabase> {
+  function getDatabaseByVersion (databaseName: string, storeMap: ObjectStoreMap, version: number): Promise<TypedObjectStoreIDBDatabase<T>> {
     return new Promise((resolve, reject) => {
       const IDBOpenRequest = indexedDB.open(databaseName, version)
   
@@ -121,7 +134,8 @@ export async function createIDB(
             }
           }
         }
-        resolve(IDBOpenRequest.result)
+        
+        resolve(db as TypedObjectStoreIDBDatabase<T>)
       }
       IDBOpenRequest.onupgradeneeded = (event) => {
         const db = IDBOpenRequest.result

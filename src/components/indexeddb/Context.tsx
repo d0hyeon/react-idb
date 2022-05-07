@@ -1,9 +1,10 @@
 import { createContext } from "react"; 
 import { InitializeDatabase } from "../../utils/createDatabase";
+import { TypedObjectStoreIDBDatabase } from "../../utils/createIDB";
 
 export interface ContextState {
-  registerDatabase: (database: InitializeDatabase) => Promise<IDBDatabase>
-  getDatabase: (name: string) => IDBDatabase | null
+  registerDatabase: <T>(database: InitializeDatabase<T>) => Promise<TypedObjectStoreIDBDatabase<T>>
+  getDatabase: (name: string) => TypedObjectStoreIDBDatabase | null
   isSuspense: boolean
 }
 
