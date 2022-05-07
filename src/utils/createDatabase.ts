@@ -9,9 +9,9 @@ export interface InitializeDatabase<T = unknown> {
 
 type ObjectStoreMap<T> = {
   [key in keyof T]: {
-    indexs: Array<keyof T[keyof T]>;
-    uniqueIndexs?: Array<keyof T[keyof T]>;
-    keyPath?: keyof T[keyof T];
+    indexs: Array<keyof T[key]>;
+    uniqueIndexs?: Array<keyof T[key]>;
+    keyPath?: keyof T[key];
     autoIncrement?: boolean;
   }
 }
