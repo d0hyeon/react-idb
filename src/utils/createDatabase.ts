@@ -18,7 +18,7 @@ type ObjectStoreMap<T> = {
 
 type CreateDatabaseSpec<T> = {
   name: string;
-  objectStores: ObjectStoreMap<T>
+  defineObjectStore: ObjectStoreMap<T>
 } & (CreateIDBOptions | {})
 
 function isCreateIDBOptions (options: unknown): options is CreateIDBOptions {
@@ -31,7 +31,7 @@ function isCreateIDBOptions (options: unknown): options is CreateIDBOptions {
 }
 
 export function createDatabase <T>(spec: CreateDatabaseSpec<T>): InitializeDatabase<T> {
-  const { name, objectStores, ...rest } = spec
+  const { name, defineObjectStore, ...rest } = spec
   const options = isCreateIDBOptions(rest) ? rest : DEFAULT_OPTIONS
   
   return {
