@@ -80,7 +80,7 @@ export type TypedObjectStore<S = unknown> = Omit<IDBObjectStore, 'add' | 'put' |
 }
 
 export type TypedIDBTransaction<Scheme> = {
-  objectStore: (storeName: keyof Scheme) => TypedObjectStore<Scheme[typeof storeName]>
+  objectStore: (storeName: keyof Scheme) => TypedObjectStore<Scheme[Extract<keyof Scheme, typeof storeName>]>
 }
 
 export type TypedObjectStoreIDBDatabase<T = unknown> = Omit<IDBDatabase, 'transaction'> & {
