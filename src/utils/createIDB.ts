@@ -1,9 +1,9 @@
-import { CreateIDBOptions, CreateIDBOptionsWithAutoVersion, ObjectStoreSpec } from "../types"
+import { CreateIDBOptions, CreateIDBOptionsWithAutoBatch, CreateIDBOptionWithoutAutoBatch, ObjectStoreMap } from "../types"
 
-export function getCreatedStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
+export function getCreatedStoreNames (db: IDBDatabase, storeMap: ObjectStoreMap) {
   const createdObjectStores: string[] = []
   
-  storeSpecs.forEach(({ name }) => {
+  Object.keys(storeMap).forEach((name) => {
     if(!db.objectStoreNames.contains(name)) {
       createdObjectStores.push(name)
     }
@@ -12,9 +12,9 @@ export function getCreatedStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSp
   return createdObjectStores
 }
 
-export function getDeletedStoreNames (db: IDBDatabase, storeSpecs: ObjectStoreSpec[]) {
+export function getDeletedStoreNames (db: IDBDatabase, storeMap: ObjectStoreMap) {
   let idx = 0
-  const names = storeSpecs.map(store => store.name)
+  const names = Object.keys(storeMap)
   const deletedObjectStores = []
 
   while(true) {
@@ -70,29 +70,31 @@ export function getVersionIDB (name: string): Promise<number> {
 } 
 
 
-export const DEFAULT_OPTIONS: CreateIDBOptionsWithAutoVersion = {
-  autoVersioning: true
+export const DEFAULT_OPTIONS: CreateIDBOptionsWithAutoBatch = {
+  autoBatch: true
 }
 export async function createIDB(
-  name: string, 
-  storeSpecs: ObjectStoreSpec[], 
+  databaseName: string, 
+  storeMap: ObjectStoreMap, 
   options: CreateIDBOptions = DEFAULT_OPTIONS
 ): Promise<IDBDatabase> {
-  const { autoVersioning } = options
-  const version = options.autoVersioning ? await getVersionIDB(name) : options.version
-  const blackStoreList = autoVersioning && typeof autoVersioning === 'object'
-    ? autoVersioning.blackStoreList
+  const { autoBatch } = options
+  const version = options?.autoBatch 
+    ? await getVersionIDB(databaseName) 
+    : (options as CreateIDBOptionWithoutAutoBatch).version
+  const blackStoreList = autoBatch && typeof autoBatch === 'object'
+    ? autoBatch.blackStoreList
     : null
 
-  function getDatabaseByVersion (name: string, storeSpecs: ObjectStoreSpec[], version: number): Promise<IDBDatabase> {
+  function getDatabaseByVersion (databaseName: string, storeMap: ObjectStoreMap, version: number): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const IDBOpenRequest = indexedDB.open(name, version)
+      const IDBOpenRequest = indexedDB.open(databaseName, version)
   
       IDBOpenRequest.onsuccess = () => {
         const db = IDBOpenRequest.result
-        if(autoVersioning) {
-          let createdStoreNames = getCreatedStoreNames(db, storeSpecs)
-          let deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
+        if(autoBatch) {
+          let createdStoreNames = getCreatedStoreNames(db, storeMap)
+          let deletedStoreNames = getDeletedStoreNames(db, storeMap)
 
           if(blackStoreList && blackStoreList.length) {
             createdStoreNames = createdStoreNames.filter(value => blackStoreList.includes(value))
@@ -100,17 +102,22 @@ export async function createIDB(
           }
           
           if(createdStoreNames.length || deletedStoreNames.length) {
-            return getDatabaseByVersion(name, storeSpecs, version + 1)
+            return getDatabaseByVersion(databaseName, storeMap, version + 1)
           }
-          
-          for(let i = 0, leng = storeSpecs.length; i < leng; i++) {
-            const spec = storeSpecs[i]
-            const objectStore = db.transaction(spec.name, 'readonly').objectStore(spec.name)
+          const objectStoreKeys = Object.keys(storeMap)
+          for(let i = 0, leng = objectStoreKeys.length; i < leng; i++) {
+            const key = objectStoreKeys[i]
+            const spec = storeMap[key]
+            if(blackStoreList?.includes(objectStoreKeys[i])) {
+              continue
+            }
+            const objectStore = db.transaction(key, 'readonly').objectStore(key)
             const createIndexs = getCreatedIndexNames(objectStore, spec.indexs)
             const deleteIndexs = getDeletedIndexNames(objectStore, spec.indexs)
-  
+
             if(createIndexs.length || deleteIndexs.length) {
-              return getDatabaseByVersion(name, storeSpecs, version + 1)
+              console.log('하이')
+              return getDatabaseByVersion(databaseName, storeMap, version + 1)
             }
           }
         }
@@ -118,10 +125,11 @@ export async function createIDB(
       }
       IDBOpenRequest.onupgradeneeded = (event) => {
         const db = IDBOpenRequest.result
-        const deletedStoreNames = getDeletedStoreNames(db, storeSpecs)
-        const createdStoreNames = getCreatedStoreNames(db, storeSpecs)
+        const deletedStoreNames = getDeletedStoreNames(db, storeMap)
+        const createdStoreNames = getCreatedStoreNames(db, storeMap)
   
-        storeSpecs.forEach(({ name, indexs, uniqueIndexs, keyPath, autoIncrement }) => {
+        Object.keys(storeMap).forEach((name) => {
+          const { indexs, uniqueIndexs, keyPath, autoIncrement } = storeMap[name]
           const didCreateStore = createdStoreNames.includes(name)
           if(didCreateStore) {
             const newStore = db.createObjectStore(name, { keyPath, autoIncrement })
@@ -150,5 +158,5 @@ export async function createIDB(
     })
   }
 
-  return getDatabaseByVersion(name, storeSpecs, version)
+  return getDatabaseByVersion(databaseName, storeMap, version)
 }
