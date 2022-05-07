@@ -37,6 +37,6 @@ export function createDatabase <T>(spec: CreateDatabaseSpec<T>): InitializeDatab
   return {
     name,
     // @ts-ignore
-    creatingDatabase: createIDB<T>(name, objectStores, options),
+    creatingDatabase: createIDB<T>(name, defineObjectStore, options),
   }
 }
