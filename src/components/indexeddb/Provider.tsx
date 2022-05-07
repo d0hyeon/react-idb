@@ -1,56 +1,70 @@
-import { FC, useEffect, useMemo, useState } from "react";
-import { createIDB } from "../../utils/idb";
-import { ContextState, idbContext, INITIAL_STATE } from "./Context";
+import { FC, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { InitializeDatabase } from "../../utils/createDatabase";
+import { ContextState, idbContext } from "./Context";
 
-interface ObjectStore {
-  name: string;
-  indexs: string[]
-  uniqueIndexs?: string[]
-  keyPath?: string; 
-  autoIncrement?:boolean
+interface DatabaseMap {
+  [key: string]: IDBDatabase
 }
 
-
-interface ProviderProps {
-  dbName: string;
-  declareStores: ObjectStore[];
-  version?: number;
-}
-
-const Provider: FC<ProviderProps> = ({ 
-  dbName,
-  declareStores,
-  version,
+const Provider: FC<{isSuspense?: ContextState['isSuspense']}> = ({ 
+  isSuspense = false,
   children, 
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [db, setDb] = useState<IDBDatabase | null>(null);
+  const [databaseMap, setDatabaseMap] = useState<DatabaseMap>({})
+  const databaseMapRef = useRef<DatabaseMap>({})
+  const pendingDatabaseMapRef = useRef<Record<string, Promise<IDBDatabase>>>({})
 
   useEffect(() => {
-    createIDB(dbName, declareStores, version)
-      .then(setDb)
-  }, [version, setDb])
+    databaseMapRef.current = databaseMap
+  }, [databaseMap, databaseMapRef])
 
-  useEffect(() => {
-    if(db) {
-      setIsLoading(true)
-    }
-  }, [db, version, setIsLoading])
+  const registerDatabase = useCallback((initiDatabase: InitializeDatabase): Promise<IDBDatabase> => {
+    const {name, creatingDatabase} = initiDatabase
 
-  const contextValue = useMemo<ContextState>(() => {
-    if(isLoading) {
-      return INITIAL_STATE
+    if(!!databaseMapRef.current[name]) {
+      return Promise.resolve(databaseMapRef.current[name])
     }
-    return {
-      version,
-      dbName,
-      database: db
-    } as ContextState
-  }, [dbName, isLoading])
+
+    if(!!pendingDatabaseMapRef.current[name]) {
+      return pendingDatabaseMapRef.current[name]
+    }
+
+    return new Promise((resolve) => {
+      pendingDatabaseMapRef.current[name] = creatingDatabase
+      creatingDatabase.then((database) => {
+        setDatabaseMap(curr => ({
+          ...curr,
+          [name]: database
+        }))
+        delete pendingDatabaseMapRef.current[name]
+        resolve(database)
+      })
+    })
+  }, [setDatabaseMap, databaseMapRef, pendingDatabaseMapRef])
+  
+
+  const getDatabase = useCallback((name) => {
+    return databaseMapRef.current[name] ?? null
+  }, [databaseMapRef])
+
+  const getPendingDatabases = useCallback(() => {
+    return pendingDatabaseMapRef.current
+  }, [pendingDatabaseMapRef])
+
+  const contextValue = useMemo<ContextState>(() => ({
+    registerDatabase,
+    getDatabase,
+    getPendingDatabases,
+    isSuspense
+  }), [isSuspense, registerDatabase, getDatabase, getPendingDatabases])
 
   return (
     <idbContext.Provider value={contextValue}>
-      {children}
+      {isSuspense ? (
+        <Suspense fallback="">
+          {children}
+        </Suspense>
+      ) : children}
     </idbContext.Provider>
   )
 }
